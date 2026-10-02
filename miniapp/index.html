@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Userbot</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color, #0f0f12);
+      --text: var(--tg-theme-text-color, #f2f2f2);
+      --hint: var(--tg-theme-hint-color, #9a9aad);
+      --btn: var(--tg-theme-button-color, #2aabee);
+      --btn-text: var(--tg-theme-button-text-color, #fff);
+      --sec: var(--tg-theme-secondary-bg-color, #1c1c24);
+      --ok: #3dd68c;
+      --err: #e74c3c;
+      --warn: #f5a623;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      padding: 16px 16px 40px; font-size: 15px;
+    }
+    h1 { font-size: 1.3rem; margin-bottom: 4px; }
+    .sub { color: var(--hint); font-size: 0.88rem; margin-bottom: 14px; line-height: 1.4; }
+    .banner {
+      border-radius: 12px; padding: 12px 14px; font-size: 0.85rem;
+      line-height: 1.45; margin-bottom: 14px;
+    }
+    .ok { background: rgba(61,214,140,.12); border: 1px solid var(--ok); }
+    .err { background: rgba(231,76,60,.12); border: 1px solid var(--err); }
+    .warn { background: rgba(245,166,35,.12); border: 1px solid var(--warn); }
+    .card { background: var(--sec); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+    .card h2 { font-size: 1rem; margin-bottom: 6px; }
+    label { display: block; font-size: 0.78rem; color: var(--hint); margin: 12px 0 4px; }
+    input {
+      width: 100%; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.12); background: var(--bg);
+      color: var(--text); font-size: 16px; outline: none;
+    }
+    .hint { font-size: 0.8rem; color: var(--hint); margin-top: 8px; line-height: 1.4; }
+    a { color: var(--tg-theme-link-color, #6cb6ff); }
+    .btn {
+      display: block; width: 100%; margin-top: 12px; padding: 14px;
+      border: 0; border-radius: 12px; background: var(--btn); color: var(--btn-text);
+      font-size: 1rem; font-weight: 600; cursor: pointer; touch-action: manipulation;
+    }
+    .btn:disabled { opacity: 0.45; }
+    .btn.sec { background: #3a3a48; }
+    .btn.danger { background: #8b2e2e; }
+    .btn.ok { background: #1e6b45; }
+    .hidden { display: none !important; }
+    .row { display: flex; gap: 8px; }
+    .row .btn { flex: 1; }
+    .status-line {
+      font-size: 0.95rem; margin: 8px 0 4px; line-height: 1.5;
+    }
+    .status-line b { color: var(--ok); }
+    .status-line.dim b { color: var(--warn); }
+    .status-line.off b { color: var(--hint); }
+    #log {
+      margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+      background: var(--bg); font-size: 0.85rem; line-height: 1.45;
+      white-space: pre-wrap; word-break: break-word; min-height: 40px;
+    }
+    .step-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--hint); margin-right: 4px; }
+    .step-dot.on { background: var(--btn); }
+  </style>
+</head>
+<body>
+  <h1>🖋 Userbot</h1>
+  <p class="sub">«Передумал писать» — только личные сообщения. Вход и управление сессией.</p>
+  <div id="banner" class="banner warn">Загрузка…</div>
+
+  <!-- MANAGE: когда сессия уже есть -->
+  <div class="card hidden" id="manage">
+    <h2>Управление сессией</h2>
+    <p class="status-line" id="status-line">Статус: <b>—</b></p>
+    <p class="hint" id="status-detail">Только ЛС · группы и каналы игнорируются</p>
+    <div class="row">
+      <button type="button" class="btn ok" id="btn-on">▶️ Включить</button>
+      <button type="button" class="btn sec" id="btn-off">⏸ Выключить</button>
+    </div>
+    <button type="button" class="btn sec" id="btn-refresh">🔄 Обновить статус</button>
+    <button type="button" class="btn danger" id="btn-delete">🗑 Удалить сессию</button>
+    <button type="button" class="btn sec" id="btn-relogin">🔑 Войти заново</button>
+  </div>
+
+  <div id="setup-dots" style="margin-bottom:12px">
+    <span class="step-dot on" id="d1"></span>
+    <span class="step-dot" id="d2"></span>
+    <span class="step-dot" id="d3"></span>
+  </div>
+
+  <!-- STEP 1: API + phone -->
+  <div class="card" id="step1">
+    <h2>1. API и телефон</h2>
+    <p class="hint"><a href="https://my.telegram.org/apps" target="_blank" rel="noopener">my.telegram.org/apps</a></p>
+    <label>API ID</label>
+    <input type="number" id="api_id" placeholder="12345678" inputmode="numeric" />
+    <label>API Hash</label>
+    <input type="text" id="api_hash" placeholder="abcdef..." autocomplete="off" />
+    <label>Телефон (с кодом страны)</label>
+    <input type="tel" id="phone" placeholder="+380..." />
+    <button type="button" class="btn" id="btn-phone">Запросить код</button>
+  </div>
+
+  <!-- STEP 2: code -->
+  <div class="card hidden" id="step2">
+    <h2>2. Код из Telegram</h2>
+    <p class="hint">Код придёт в приложение Telegram (служебное сообщение) или SMS.</p>
+    <label>Код</label>
+    <input type="text" id="code" placeholder="12345" inputmode="numeric" autocomplete="one-time-code" />
+    <button type="button" class="btn" id="btn-code">Войти</button>
+    <button type="button" class="btn sec" id="btn-back1">← Назад</button>
+  </div>
+
+  <!-- STEP 2b: 2FA -->
+  <div class="card hidden" id="step2fa">
+    <h2>2FA пароль</h2>
+    <label>Облачный пароль</label>
+    <input type="password" id="password" placeholder="пароль" autocomplete="current-password" />
+    <button type="button" class="btn" id="btn-2fa">Подтвердить 2FA</button>
+  </div>
+
+  <!-- STEP 3: done → переключаем на manage -->
+  <div class="card hidden" id="step3">
+    <h2>✅ Готово</h2>
+    <p class="hint" id="done-msg">Userbot подключён.</p>
+    <button type="button" class="btn" id="btn-to-manage">Перейти к управлению</button>
+  </div>
+
+  <div class="card">
+    <div id="log">—</div>
+  </div>
+
+<script>
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+
+  var initData = (tg && tg.initData) || '';
+  var banner = document.getElementById('banner');
+  var logEl = document.getElementById('log');
+  var API = window.location.origin;
+  var currentStatus = null;
+
+  function log(msg, cls) {
+    logEl.textContent = msg;
+    logEl.style.border = cls === 'ok' ? '1px solid #3dd68c' :
+      cls === 'err' ? '1px solid #e74c3c' : 'none';
+  }
+
+  function stripHtml(s) {
+    return (s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  if (initData) {
+    banner.className = 'banner ok';
+    banner.textContent = '✅ Открыто из Telegram. Можно входить и управлять сессией.';
+  } else {
+    banner.className = 'banner err';
+    banner.textContent = '⚠️ Открой эту страницу из бота кнопкой «Открыть Mini App». Без этого вход не сработает.';
+  }
+
+  function show(id) {
+    ['manage', 'step1', 'step2', 'step2fa', 'step3'].forEach(function (s) {
+      document.getElementById(s).classList.toggle('hidden', s !== id);
+    });
+    var setup = (id === 'step1' || id === 'step2' || id === 'step2fa' || id === 'step3');
+    document.getElementById('setup-dots').classList.toggle('hidden', !setup);
+    document.getElementById('d1').classList.toggle('on', id === 'step1');
+    document.getElementById('d2').classList.toggle('on', id === 'step2' || id === 'step2fa');
+    document.getElementById('d3').classList.toggle('on', id === 'step3');
+  }
+
+  function val(id) { return (document.getElementById(id).value || '').trim(); }
+
+  function renderStatus(st) {
+    currentStatus = st || null;
+    var line = document.getElementById('status-line');
+    if (!st || !st.has_session) {
+      line.className = 'status-line off';
+      line.innerHTML = 'Статус: <b>не подключён</b>';
+      return;
+    }
+    var text = st.status_text || (st.running ? 'активен' : (st.active ? 'в БД' : 'выключен'));
+    if (st.running) {
+      line.className = 'status-line';
+      line.innerHTML = 'Статус: <b>🟢 ' + text + '</b>';
+    } else if (st.active) {
+      line.className = 'status-line dim';
+      line.innerHTML = 'Статус: <b>🟡 ' + text + '</b>';
+    } else {
+      line.className = 'status-line dim';
+      line.innerHTML = 'Статус: <b>⏸ ' + text + '</b>';
+    }
+    document.getElementById('btn-on').disabled = !!(st.running);
+    document.getElementById('btn-off').disabled = !(st.has_session);
+  }
+
+  async function api(path, body, method) {
+    method = method || 'POST';
+    body = body || {};
+    if (method === 'POST') body.init_data = initData;
+    var opts = {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': initData
+      }
+    };
+    var url = API + path;
+    if (method === 'GET') {
+      url += (path.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+    } else {
+      opts.body = JSON.stringify(body);
+    }
+    var res = await fetch(url, opts);
+    var data;
+    try { data = await res.json(); } catch (e) {
+      throw new Error('Сервер вернул не JSON (код ' + res.status + '). Проверь nginx / API.');
+    }
+    if (!res.ok) {
+      throw new Error(data.detail || data.message || ('HTTP ' + res.status));
+    }
+    return data;
+  }
+
+  async function loadStatus() {
+    if (!initData) return null;
+    try {
+      var st = await api('/api/userbot/status', null, 'GET');
+      renderStatus(st);
+      return st;
+    } catch (e) {
+      log('Статус: ' + e.message, 'err');
+      return null;
+    }
+  }
+
+  async function boot() {
+    log('API: ' + API + '/api/… | initData: ' + (initData ? 'да' : 'нет'));
+    if (!initData) {
+      show('step1');
+      return;
+    }
+    var st = await loadStatus();
+    if (st && st.has_session) {
+      show('manage');
+      log('Сессия найдена. Можно включать / выключать / удалить.', 'ok');
+    } else {
+      show('step1');
+    }
+  }
+
+  document.getElementById('btn-phone').onclick = async function () {
+    if (!initData) return log('Открой Mini App из бота', 'err');
+    var api_id = val('api_id'), api_hash = val('api_hash'), phone = val('phone');
+    if (!api_id || !api_hash) return log('Заполни API ID и Hash', 'err');
+    if (phone.length < 8) return log('Телефон вида +380...', 'err');
+    this.disabled = true;
+    log('Отправка кода…');
+    try {
+      var data = await api('/api/userbot/phone', {
+        api_id: parseInt(api_id, 10),
+        api_hash: api_hash,
+        phone: phone
+      });
+      log(stripHtml(data.message), data.ok ? 'ok' : 'err');
+      if (data.ok) show('step2');
+    } catch (e) {
+      log('Ошибка: ' + e.message, 'err');
+    }
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-code').onclick = async function () {
+    var code = val('code').replace(/\s/g, '');
+    if (!code) return log('Введи код', 'err');
+    this.disabled = true;
+    log('Проверка кода…');
+    try {
+      var data = await api('/api/userbot/code', { code: code });
+      log(stripHtml(data.message), data.ok ? 'ok' : 'err');
+      if (data.ok) {
+        document.getElementById('done-msg').textContent = stripHtml(data.message);
+        if (data.status) renderStatus(data.status);
+        show('step3');
+      } else if (data.need_2fa) {
+        show('step2fa');
+      }
+    } catch (e) {
+      log('Ошибка: ' + e.message, 'err');
+    }
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-2fa').onclick = async function () {
+    var password = document.getElementById('password').value;
+    var code = val('code').replace(/\s/g, '');
+    if (!password) return log('Введи пароль 2FA', 'err');
+    this.disabled = true;
+    log('2FA…');
+    try {
+      var data = await api('/api/userbot/code', { code: code || '0', password: password });
+      log(stripHtml(data.message), data.ok ? 'ok' : 'err');
+      if (data.ok) {
+        document.getElementById('done-msg').textContent = stripHtml(data.message);
+        if (data.status) renderStatus(data.status);
+        show('step3');
+      }
+    } catch (e) {
+      log('Ошибка: ' + e.message, 'err');
+    }
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-back1').onclick = function () { show('step1'); };
+  document.getElementById('btn-to-manage').onclick = function () { show('manage'); loadStatus(); };
+
+  document.getElementById('btn-on').onclick = async function () {
+    this.disabled = true;
+    log('Включаю…');
+    try {
+      var data = await api('/api/userbot/on', {});
+      log(stripHtml(data.message), data.ok ? 'ok' : 'err');
+      if (data.status) renderStatus(data.status);
+      else await loadStatus();
+    } catch (e) {
+      log('Ошибка: ' + e.message, 'err');
+    }
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-off').onclick = async function () {
+    this.disabled = true;
+    log('Выключаю…');
+    try {
+      var data = await api('/api/userbot/off', {});
+      log(stripHtml(data.message), data.ok ? 'ok' : 'err');
+      if (data.status) renderStatus(data.status);
+      else await loadStatus();
+    } catch (e) {
+      log('Ошибка: ' + e.message, 'err');
+    }
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-delete').onclick = async function () {
+    if (!confirm('Удалить сессию userbot? Нужно будет входить заново.')) return;
+    this.disabled = true;
+    log('Удаляю…');
+    try {
+      var data = await api('/api/userbot/delete', {});
+      log(stripHtml(data.message), data.ok ? 'ok' : 'err');
+      renderStatus(data.status || { has_session: false });
+      show('step1');
+    } catch (e) {
+      log('Ошибка: ' + e.message, 'err');
+    }
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-refresh').onclick = async function () {
+    this.disabled = true;
+    log('Обновляю статус…');
+    var st = await loadStatus();
+    if (st) log('Статус обновлён: ' + (st.status_text || '—'), 'ok');
+    this.disabled = false;
+  };
+
+  document.getElementById('btn-relogin').onclick = function () {
+    show('step1');
+    log('Можно войти заново (API + телефон). Старая сессия останется, пока не удалишь.');
+  };
+
+  boot();
+})();
+</script>
+</body>
+</html>
